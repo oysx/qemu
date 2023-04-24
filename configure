@@ -231,6 +231,7 @@ safe_stack=""
 use_containers="yes"
 gdb_bin=$(command -v "gdb-multiarch" || command -v "gdb")
 gdb_arches=""
+glib_has_gslice="no"
 
 if test -e "$source_path/.git"
 then
@@ -315,6 +316,8 @@ for opt do
   ;;
   --cxx=*) CXX="$optarg"
   ;;
+  --objcc=*) objcc="$optarg"
+  ;;
   --cpu=*) cpu="$optarg"
   ;;
   --extra-cflags=*)
@@ -358,6 +361,21 @@ if test -z "${CXX}${cross_prefix}"; then
   cxx="c++"
 else
   cxx="${CXX-${cross_prefix}g++}"
+fi
+
+# Preferred ObjC compiler:
+# $objcc (if set, i.e. via --objcc option)
+# ${cross_prefix}clang (if cross-prefix specified)
+# clang (if available)
+# $cc
+if test -z "${objcc}${cross_prefix}"; then
+  if has clang; then
+    objcc=clang
+  else
+    objcc="$cc"
+  fi
+else
+  objcc="${objcc-${cross_prefix}clang}"
 fi
 
 ar="${AR-${cross_prefix}ar}"
@@ -646,13 +664,6 @@ do
     fi
 done
 
-# Default objcc to clang if available, otherwise use CC
-if has clang; then
-  objcc=clang
-else
-  objcc="$cc"
-fi
-
 if test "$mingw32" = "yes" ; then
   EXESUF=".exe"
   # MinGW needs -mthreads for TLS and macro _MT.
@@ -712,7 +723,7 @@ for opt do
   ;;
   --cxx=*)
   ;;
-  --objcc=*) objcc="$optarg"
+  --objcc=*)
   ;;
   --make=*) make="$optarg"
   ;;
@@ -1494,6 +1505,17 @@ for i in $glib_modules; do
     fi
 done
 
+# Check whether glib has gslice, which we have to avoid for correctness.
+# TODO: remove this check and the corresponding workaround (qtree) when
+# the minimum supported glib is >= $glib_dropped_gslice_version.
+glib_dropped_gslice_version=2.75.3
+for i in $glib_modules; do
+    if ! $pkg_config --atleast-version=$glib_dropped_gslice_version $i; then
+        glib_has_gslice="yes"
+	break
+    fi
+done
+
 glib_bindir="$($pkg_config --variable=bindir glib-2.0)"
 if test -z "$glib_bindir" ; then
 	glib_bindir="$($pkg_config --variable=prefix glib-2.0)"/bin
@@ -1737,13 +1759,9 @@ if test "$sanitizers" = "yes" ; then
   # detect the static linking issue of ubsan, see also:
   # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=84285
   cat > $TMPC << EOF
-#include <stdlib.h>
-int main(void) {
-    void *tmp = malloc(10);
-    if (tmp != NULL) {
-        return *(int *)(tmp + 2);
-    }
-    return 1;
+int main(int argc, char **argv)
+{
+    return argc + 1;
 }
 EOF
   if compile_prog "$CPU_CFLAGS -Werror -fsanitize=undefined" ""; then
@@ -2420,6 +2438,9 @@ echo "GLIB_CFLAGS=$glib_cflags" >> $config_host_mak
 echo "GLIB_LIBS=$glib_libs" >> $config_host_mak
 echo "GLIB_BINDIR=$glib_bindir" >> $config_host_mak
 echo "GLIB_VERSION=$($pkg_config --modversion glib-2.0)" >> $config_host_mak
+if test "$glib_has_gslice" = "yes" ; then
+    echo "HAVE_GLIB_WITH_SLICE_ALLOCATOR=y" >> $config_host_mak
+fi
 echo "QEMU_LDFLAGS=$QEMU_LDFLAGS" >> $config_host_mak
 echo "EXESUF=$EXESUF" >> $config_host_mak
 
@@ -2599,6 +2620,10 @@ if test "$skip_meson" = no; then
   mv $cross config-meson.cross
 
   rm -rf meson-private meson-info meson-logs
+
+  # Prevent meson from automatically downloading wrapped subprojects when missing.
+  # You can use 'meson subprojects download' before running configure.
+  meson_option_add "--wrap-mode=nodownload"
 
   # Built-in options
   test "$bindir" != "bin" && meson_option_add "-Dbindir=$bindir"

@@ -3,13 +3,11 @@ specific_ss.add(when: 'CONFIG_SOFTMMU', if_true: [files(
   'ioport.c',
   'memory.c',
   'physmem.c',
-  'qtest.c',
-  'dirtylimit.c',
+  'watchpoint.c',
 )])
 
 specific_ss.add(when: ['CONFIG_SOFTMMU', 'CONFIG_TCG'], if_true: [files(
   'icount.c',
-  'watchpoint.c',
 )])
 
 softmmu_ss.add(files(
@@ -19,10 +17,12 @@ softmmu_ss.add(files(
   'cpu-throttle.c',
   'cpu-timers.c',
   'datadir.c',
+  'dirtylimit.c',
   'dma-helpers.c',
   'globals.c',
   'memory_mapping.c',
   'qdev-monitor.c',
+  'qtest.c',
   'rtc.c',
   'runstate-action.c',
   'runstate-hmp-cmds.c',
