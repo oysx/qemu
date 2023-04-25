@@ -46,6 +46,7 @@ config RISCV_VIRT
     select PLATFORM_BUS
     select ACPI
     select VIVI_DEV
+    select PTIMER
 
 config SHAKTI_C
     bool

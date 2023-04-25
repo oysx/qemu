@@ -1486,14 +1486,16 @@ static void virt_machine_init(MachineState *machine)
     /* SiFive Test MMIO device */
     sifive_test_create(memmap[VIRT_TEST].base);
 
-    vivi_dev_create(memmap[VIRT_VIVI_DEV].base);
-
     /* VirtIO MMIO devices */
     for (i = 0; i < VIRTIO_COUNT; i++) {
         sysbus_create_simple("virtio-mmio",
             memmap[VIRT_VIRTIO].base + i * memmap[VIRT_VIRTIO].size,
             qdev_get_gpio_in(DEVICE(virtio_irqchip), VIRTIO_IRQ + i));
     }
+
+    CPUState *cpu = cpu_by_arch_id(0);
+    RISCVCPU *rvcpu = RISCV_CPU(cpu);
+    vivi_dev_create(memmap[VIRT_VIVI_DEV].base, qdev_get_gpio_in(DEVICE(rvcpu), 11));
 
     gpex_pcie_init(system_memory,
                    memmap[VIRT_PCIE_ECAM].base,
